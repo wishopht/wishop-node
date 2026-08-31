@@ -24,8 +24,16 @@ export type RefundReason = Open<
 >;
 
 export type EventType = Open<
-  'charge.paid' | 'charge.failed' | 'charge.expired' | 'charge.refunded'
+  | 'charge.paid'
+  | 'charge.failed'
+  | 'charge.expired'
+  | 'charge.refunded'
+  | 'payout.created'
+  | 'payout.succeeded'
+  | 'payout.failed'
 >;
+
+export type PayoutStatus = Open<'PENDING' | 'SUCCEEDED' | 'FAILED'>;
 
 export const ChargeStatuses = {
   Initiated: 'INITIATED',
@@ -70,6 +78,15 @@ export const EventTypes = {
   ChargeFailed: 'charge.failed',
   ChargeExpired: 'charge.expired',
   ChargeRefunded: 'charge.refunded',
+  PayoutCreated: 'payout.created',
+  PayoutSucceeded: 'payout.succeeded',
+  PayoutFailed: 'payout.failed',
+} as const;
+
+export const PayoutStatuses = {
+  Pending: 'PENDING',
+  Succeeded: 'SUCCEEDED',
+  Failed: 'FAILED',
 } as const;
 
 export interface Charge {
@@ -112,10 +129,19 @@ export interface ChargeList {
   hasMore: boolean;
 }
 
+/**
+ * The object an event is about. `object` says which — `'charge'` on charge.*
+ * events, `'payout'` on payout.* ones — and only the matching field is set.
+ *
+ * `charge` became nullable in 1.1.0: a payout event carries no charge, and the
+ * previous unconditional parse produced a charge full of undefined values with
+ * an Invalid Date. Narrow on `object` (or on the event `type`) before using it.
+ */
 export interface EventData {
   object: string;
-  charge: Charge;
+  charge: Charge | null;
   refund: Refund | null;
+  payout: Payout | null;
 }
 
 export interface Event {
@@ -125,6 +151,63 @@ export interface Event {
   createdAt: Date;
   livemode: boolean;
   data: EventData;
+}
+
+/**
+ * Money sent from your wallet to a customer's.
+ *
+ * `PENDING` is not "queued": the wallet's answer was lost, so the money may or
+ * may not have moved. It resolves on its own and a `payout.succeeded` or
+ * `payout.failed` webhook reports the outcome — never send a replacement.
+ */
+export interface Payout {
+  id: string;
+  recipientPhone: string;
+  recipientName: string | null;
+  currency: string;
+  amount: string;
+  /** Charged on top of `amount`: your wallet is debited amount + fee. */
+  fee: string;
+  status: PayoutStatus;
+  failReason: string | null;
+  reference: string | null;
+  /** Values may be any JSON type, unlike a charge's string map. */
+  metadata: Record<string, unknown>;
+  livemode: boolean;
+  createdAt: Date;
+  completedAt: Date | null;
+}
+
+export interface PayoutList {
+  payouts: Payout[];
+  hasMore: boolean;
+}
+
+export interface CreatePayoutParams {
+  amount: string;
+  currency: string;
+  /**
+   * The customer's wallet number. There is no recipient name: it is resolved
+   * from the wallet and returned on the payout.
+   */
+  recipientPhone: string;
+  reference?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListPayoutsParams {
+  limit?: number;
+  startingAfter?: string;
+  status?: PayoutStatus;
+  currency?: string;
+}
+
+/**
+ * Payout creation requires an idempotency key, so unlike RequestOptions this
+ * one is not optional — the type system enforces what the API requires.
+ */
+export interface PayoutRequestOptions {
+  idempotencyKey: string;
 }
 
 export interface CreateChargeParams {

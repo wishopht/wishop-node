@@ -326,3 +326,113 @@ describe('errors', () => {
     });
   });
 });
+
+const PAYOUT = {
+  id: 'po_7Hn2vB9xQm4tRkLw',
+  recipient_phone: '+50931234567',
+  recipient_name: 'Jean Baptiste',
+  currency: 'HTG',
+  amount: '150.00',
+  fee: '3.00',
+  status: 'SUCCEEDED',
+  fail_reason: null,
+  reference: 'June payroll',
+  metadata: { employee_id: 4471 },
+  livemode: true,
+  created_at: '2026-08-31T12:04:11.318Z',
+  completed_at: '2026-08-31T12:04:12.006Z',
+};
+
+describe('payouts', () => {
+  test('create sends the idempotency key and maps the payout', async () => {
+    const { client, captured } = stub(201, PAYOUT, { message: 'payout created' });
+
+    const payout = await client.payouts.create(
+      {
+        amount: '150.00',
+        currency: 'HTG',
+        recipientPhone: '+50931234567',
+        reference: 'June payroll',
+      },
+      { idempotencyKey: 'payroll-2026-06-emp-4471' },
+    );
+
+    const request = captured[0]!;
+    assert.equal(request.method, 'POST');
+    assert.equal(request.url, `${BASE_URL}/v1/payouts`);
+    // Required, unlike on charges: the API rejects an un-keyed payout.
+    assert.equal(request.headers.get('Idempotency-Key'), 'payroll-2026-06-emp-4471');
+
+    const body = JSON.parse(request.body!);
+    assert.equal(body.recipient_phone, '+50931234567');
+    // The name is resolved from the wallet, never sent.
+    assert.equal('recipient_name' in body, false);
+
+    assert.equal(payout.recipientName, 'Jean Baptiste');
+    assert.equal(payout.fee, '3.00');
+    assert.deepEqual(payout.completedAt, new Date('2026-08-31T12:04:12.006Z'));
+    assert.deepEqual(payout.metadata, { employee_id: 4471 });
+  });
+
+  test('a 202 is a pending payout, not an error', async () => {
+    const { client } = stub(
+      202,
+      { ...PAYOUT, status: 'PENDING', completed_at: null, recipient_name: null },
+      { message: 'payout accepted' },
+    );
+
+    const payout = await client.payouts.create(
+      { amount: '150.00', currency: 'HTG', recipientPhone: '+50900000006' },
+      { idempotencyKey: 'key-1' },
+    );
+
+    assert.equal(payout.status, 'PENDING');
+    assert.equal(payout.completedAt, null);
+  });
+
+  test('a decline throws and the payout is still retrievable', async () => {
+    const { client } = stub(422, null, {
+      message: 'payout declined: merchant balance insufficient',
+    });
+
+    await assert.rejects(
+      client.payouts.create(
+        { amount: '999999.00', currency: 'HTG', recipientPhone: '+50900000001' },
+        { idempotencyKey: 'key-2' },
+      ),
+      (error: unknown) => {
+        assert.ok(error instanceof UnprocessableError);
+        assert.match(error.message, /balance insufficient/);
+        return true;
+      },
+    );
+  });
+
+  test('list sends filters and maps has_more', async () => {
+    const { client, captured } = stub(200, { payouts: [PAYOUT], has_more: true });
+
+    const list = await client.payouts.list({
+      limit: 25,
+      status: 'FAILED',
+      currency: 'HTG',
+      startingAfter: 'po_prev',
+    });
+
+    const url = new URL(captured[0]!.url);
+    assert.equal(url.searchParams.get('limit'), '25');
+    assert.equal(url.searchParams.get('status'), 'FAILED');
+    assert.equal(url.searchParams.get('currency'), 'HTG');
+    assert.equal(url.searchParams.get('starting_after'), 'po_prev');
+
+    assert.equal(list.payouts.length, 1);
+    assert.equal(list.hasMore, true);
+  });
+
+  test('retrieve encodes the id', async () => {
+    const { client, captured } = stub(200, PAYOUT);
+
+    await client.payouts.retrieve('po_7Hn2vB9xQm4tRkLw');
+
+    assert.equal(captured[0]!.url, `${BASE_URL}/v1/payouts/po_7Hn2vB9xQm4tRkLw`);
+  });
+});

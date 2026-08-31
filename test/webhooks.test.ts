@@ -57,9 +57,44 @@ describe('constructEvent', () => {
 
     assert.equal(event.id, 'evt_7Fk2mQ9xLp4nRt8W');
     assert.equal(event.type, 'charge.refunded');
-    assert.equal(event.data.charge.amountRefunded, '500.00');
+    assert.equal(event.data.charge?.amountRefunded, '500.00');
     assert.equal(event.data.refund?.id, 're_8Wq3nK6yTf2mBxLp');
     assert.deepEqual(event.createdAt, new Date('2026-08-12T17:22:08.559Z'));
+  });
+
+  // Before 1.1.0 this produced a charge of undefined fields with an Invalid
+  // Date rather than failing, because toCharge ran unconditionally.
+  test('parses a payout event, which carries no charge', () => {
+    const payload = JSON.stringify({
+      id: 'evt_6Lm4pT8vRw2nKxQd',
+      type: 'payout.succeeded',
+      api_version: '2026-08-01',
+      created_at: '2026-08-31T12:04:12.006Z',
+      livemode: true,
+      data: {
+        object: 'payout',
+        payout: {
+          id: 'po_7Hn2vB9xQm4tRkLw',
+          recipient_phone: '+50931234567',
+          currency: 'HTG',
+          amount: '150.00',
+          fee: '3.00',
+          status: 'SUCCEEDED',
+          livemode: true,
+          created_at: '2026-08-31T12:04:11.318Z',
+          completed_at: '2026-08-31T12:04:12.006Z',
+        },
+      },
+    });
+
+    const event = constructEvent(payload, header('whsec_test', NOW, payload), 'whsec_test');
+
+    assert.equal(event.type, 'payout.succeeded');
+    assert.equal(event.data.object, 'payout');
+    assert.equal(event.data.charge, null);
+    assert.equal(event.data.payout?.id, 'po_7Hn2vB9xQm4tRkLw');
+    assert.equal(event.data.payout?.fee, '3.00');
+    assert.deepEqual(event.data.payout?.completedAt, new Date('2026-08-31T12:04:12.006Z'));
   });
 
   test('accepts a Buffer payload', () => {

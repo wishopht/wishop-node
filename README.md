@@ -104,6 +104,41 @@ const refunds = await wishop.refunds.list('ch_3kQ8xR2mVn7pLdYt');
 
 Omit `amount` to refund everything still refundable. Refund lists are not paginated.
 
+## Payouts
+
+Sends money from your wallet to a customer's — payroll, marketplace settlements, rewards.
+
+```ts
+const payout = await wishop.payouts.create(
+  {
+    amount: '150.00',
+    currency: 'HTG',
+    recipientPhone: '+50931234567',
+    reference: 'June payroll',
+  },
+  { idempotencyKey: `payroll-2026-06-${employee.id}` },
+);
+
+const payouts = await wishop.payouts.list({ status: 'FAILED' });
+const one = await wishop.payouts.retrieve('po_7Hn2vB9xQm4tRkLw');
+```
+
+The second argument is **required**, unlike everywhere else in this client: a payout pushes money out, so an un-keyed retry after a dropped connection is indistinguishable from a second payment. Your wallet is debited `amount + fee`.
+
+Three outcomes, and the middle one is the one to handle:
+
+```ts
+if (payout.status === 'SUCCEEDED') {
+  // The money moved.
+} else if (payout.status === 'PENDING') {
+  // The wallet's answer was lost — the money may or may not have moved.
+  // It resolves on its own and a webhook reports the outcome.
+  // Never send a replacement; retry with the SAME key if you must.
+}
+```
+
+A decline throws `UnprocessableError` and still records a `FAILED` payout you can `retrieve` — unlike a rejected refund, which leaves nothing behind.
+
 ## Money
 
 Amounts are strings, never numbers, and every field that holds money is a string: `amount`, `fee`, `net`, `customerDebitAmount`, `amountRefunded`. Parse them with a decimal library, never `parseFloat`.
@@ -122,7 +157,9 @@ const charge = await wishop.charges.create(params, {
 });
 ```
 
-Nothing is sent unless you pass it. Derive the key from the payment *attempt*, not the order — reusing an order id replays the previous failure instead of creating the charge a retrying customer needs. Keys are remembered for 24 hours.
+On charges and refunds nothing is sent unless you pass it. **Payouts are the exception: the key is required** and `payouts.create` will not type-check without it.
+
+Derive a charge key from the payment *attempt*, not the order — reusing an order id replays the previous failure instead of creating the charge a retrying customer needs. Derive a payout key the opposite way, from the payment itself, and reuse it across retries: a fresh key on a payout retry sends a second payment. Keys are remembered for 24 hours.
 
 ## Errors
 
@@ -151,11 +188,11 @@ try {
 | `ValidationError` | 400 | Malformed body, invalid amount or currency, metadata over the limits |
 | `AuthenticationError` | 401 | Missing, malformed, unknown, or revoked key |
 | `PermissionError` | 403 | Live key from an address that is not whitelisted |
-| `NotFoundError` | 404 | No charge or refund with that id in this mode |
-| `ConflictError` | 409 | Idempotency key still in flight, or charge no longer payable |
+| `NotFoundError` | 404 | No charge, refund or payout with that id in this mode; or no wallet for a payout recipient's phone |
+| `ConflictError` | 409 | Idempotency key still in flight, charge no longer payable, or wallet not provisioned for live payouts |
 | `ChargeExpiredError` | 410 | Charge expired |
 | `PayloadTooLargeError` | 413 | Upload too large |
-| `UnprocessableError` | 422 | Currency not enabled, charge not refundable, refund exceeds remaining, wallet declined |
+| `UnprocessableError` | 422 | Currency not enabled, charge not refundable, refund exceeds remaining, wallet declined, or a payout declined for balance or recipient |
 | `RateLimitError` | 429 | Rate limit exceeded; carries `retryAfter` in seconds |
 | `ApiError` | 5xx and anything unmapped | Failure on the gateway side |
 | `ConnectionError` | — | The request never completed: DNS, TLS, socket failure, or the client timeout |
@@ -231,6 +268,12 @@ app.post(
       case 'charge.refunded':
         recordRefund(event.data.refund!);
         break;
+      case 'payout.succeeded':
+        markPayoutSent(event.data.payout!);
+        break;
+      case 'payout.failed':
+        markPayoutFailed(event.data.payout!);
+        break;
     }
 
     res.sendStatus(200);
@@ -250,9 +293,11 @@ Delivery is at-least-once, so deduplicate on the `X-Webhook-Id` header, which is
 
 `event.data.refund` is set only on `charge.refunded`. A partial refund leaves the charge `PAID`; read `amountRefunded`.
 
+`event.data.charge` is `null` on `payout.*` events and `event.data.payout` is `null` on `charge.*` ones — `event.data.object` says which you have. Switching on `event.type`, as above, narrows this for you.
+
 ## Testing
 
-Test mode uses `sk_test_` keys against the same host. The payment outcome is chosen by the phone number the customer enters — see [test phone numbers](https://docs.wishop.com/testing/test-phone-numbers).
+Test mode uses `sk_test_` keys against the same host. The outcome is chosen by a phone number — the one the customer enters for a charge, the recipient's for a payout. The two use different tables; `+50900000006` is how you exercise a pending payout. See [test phone numbers](https://docs.wishop.com/testing/test-phone-numbers).
 
 To test your own code against this client, point it at a local server or supply your own `fetch`:
 
@@ -262,7 +307,7 @@ const wishop = new Wishop('sk_test_key', { baseUrl: 'http://localhost:8080' });
 
 ## Reference
 
-Field-by-field documentation for the charge, refund, and event objects lives at [docs.wishop.com](https://docs.wishop.com).
+Field-by-field documentation for the charge, refund, payout, and event objects lives at [docs.wishop.com](https://docs.wishop.com).
 
 ## License
 

@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.1.0
+
+Payouts — send money from your wallet to a customer's.
+
+- `payouts.create`, `payouts.retrieve`, `payouts.list`
+- `Payout`, `PayoutList`, `CreatePayoutParams`, `ListPayoutsParams`,
+  `PayoutRequestOptions`, `PayoutStatus` types and the `PayoutStatuses` constants
+- `payout.created`, `payout.succeeded`, `payout.failed` in `EventType` and
+  `EventTypes`
+
+Fixed: a `payout.*` webhook decoded into a charge of undefined fields with an
+Invalid Date, because `toEvent` parsed `data.charge` unconditionally. It now
+parses only the object the event carries.
+
+**Type change:** `EventData.charge` is now `Charge | null` and `EventData.payout`
+was added. Code that reads `event.data.charge` without narrowing needs a `?.` or
+a `switch` on `event.type`. The runtime behaviour it replaces was already broken
+for payout events, and charge events are unchanged.
+
+`payouts.create` takes its options argument as required, not optional — the API
+requires an idempotency key, and an un-keyed payout retry pays twice.
+
 ## 1.0.0
 
 Initial release.
