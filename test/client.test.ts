@@ -39,7 +39,7 @@ const CHARGE = {
   expires_at: '2026-08-12T15:30:00.000Z',
   confirmed_at: null,
   created_at: '2026-08-12T15:00:00.000Z',
-  pay_url: 'https://pay.wishop.com/pay/9f2c7a1e',
+  pay_url: 'https://gatewayapi.wishopht.com/pay/9f2c7a1e',
 };
 
 const REFUND = {
@@ -127,7 +127,7 @@ describe('charges', () => {
 
     assert.equal(charge.id, 'ch_3kQ8xR2mVn7pLdYt');
     assert.equal(charge.orderId, 'order_1042');
-    assert.equal(charge.payUrl, 'https://pay.wishop.com/pay/9f2c7a1e');
+    assert.equal(charge.payUrl, 'https://gatewayapi.wishopht.com/pay/9f2c7a1e');
   });
 
   test('create omits the idempotency key by default', async () => {

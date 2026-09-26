@@ -5,7 +5,7 @@ import { Refunds } from './resources/refunds';
 
 export const VERSION = '1.1.0';
 
-const DEFAULT_BASE_URL = 'https://api.wishop.com';
+const DEFAULT_BASE_URL = 'https://gatewayapi.wishopht.com';
 const DEFAULT_TIMEOUT = 30_000;
 
 export interface WishopOptions {
