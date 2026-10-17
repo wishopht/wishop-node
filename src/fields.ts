@@ -35,6 +35,7 @@ export function toCharge(raw: Raw): Charge {
     customerDebitAmount: raw.customer_debit_amount ?? null,
     amountRefunded: raw.amount_refunded ?? null,
     customerPhoneMasked: raw.customer_phone_masked ?? null,
+    channel: raw.channel ?? 'api',
     status: raw.status,
     failReason: raw.fail_reason ?? null,
     returnUrl: raw.return_url ?? null,

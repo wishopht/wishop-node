@@ -31,6 +31,7 @@ const CHARGE = {
   customer_debit_amount: '1500.00',
   amount_refunded: '0.00',
   customer_phone_masked: null,
+  channel: 'api',
   status: 'INITIATED',
   fail_reason: null,
   return_url: 'https://yourstore.com/orders/1042/complete',
@@ -136,6 +137,22 @@ describe('charges', () => {
     await client.charges.create({ amount: '1500.00', currency: 'HTG' });
 
     assert.equal(captured[0]!.headers.has('Idempotency-Key'), false);
+  });
+
+  test('exposes channel and keeps non-string metadata values', async () => {
+    const { client } = stub(200, { ...CHARGE, channel: 'app', metadata: { seats: 4, vip: true } });
+
+    const charge = await client.charges.retrieve('ch_3kQ8xR2mVn7pLdYt');
+
+    assert.equal(charge.channel, 'app');
+    assert.deepEqual(charge.metadata, { seats: 4, vip: true });
+  });
+
+  test('channel falls back to api when the field is absent', async () => {
+    const { channel: _channel, ...legacy } = CHARGE;
+    const { client } = stub(200, legacy);
+
+    assert.equal((await client.charges.retrieve('ch_3kQ8xR2mVn7pLdYt')).channel, 'api');
   });
 
   test('metadata keys survive the camelCase conversion untouched', async () => {

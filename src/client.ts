@@ -3,7 +3,7 @@ import { Charges } from './resources/charges';
 import { Payouts } from './resources/payouts';
 import { Refunds } from './resources/refunds';
 
-export const VERSION = '1.1.0';
+export const VERSION = '1.2.0';
 
 const DEFAULT_BASE_URL = 'https://gatewayapi.wishopht.com';
 const DEFAULT_TIMEOUT = 30_000;

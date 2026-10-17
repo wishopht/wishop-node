@@ -15,6 +15,8 @@ export type FailReason = Open<
   | 'INTERNAL_ERROR'
 >;
 
+export type ChargeChannel = Open<'api' | 'app'>;
+
 export type FeeBearer = Open<'merchant' | 'customer'>;
 
 export type RefundStatus = Open<'pending' | 'succeeded' | 'failed'>;
@@ -101,10 +103,12 @@ export interface Charge {
   customerDebitAmount: string | null;
   amountRefunded: string | null;
   customerPhoneMasked: string | null;
+  /** Where the charge started: your API call, or a customer in the WiShop app. */
+  channel: ChargeChannel;
   status: ChargeStatus;
   failReason: FailReason | null;
   returnUrl: string | null;
-  metadata: Record<string, string>;
+  metadata: Record<string, unknown>;
   livemode: boolean;
   expiresAt: Date | null;
   confirmedAt: Date | null;
@@ -217,7 +221,7 @@ export interface CreateChargeParams {
   description?: string;
   feeBearer?: FeeBearer;
   returnUrl?: string;
-  metadata?: Record<string, string>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ListChargesParams {

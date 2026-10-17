@@ -28,6 +28,7 @@ export {
   RefundStatuses,
   type Charge,
   type ChargeList,
+  type ChargeChannel,
   type ChargeStatus,
   type CreateChargeParams,
   type CreatePayoutParams,
